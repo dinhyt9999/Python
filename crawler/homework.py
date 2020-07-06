@@ -1,47 +1,43 @@
 from bs4 import BeautifulSoup as soup
 import requests
 import time
+from pymongo import MongoClient
+import matplotlib.pyplot as plt
+import numpy as np
 
+client = MongoClient()
+coin_market = client.get_database("CoinMarket")
+coin_price = coin_market.get_collection("CoinPrice")
 url = "https://coinmarketcap.com/all/views/all/"
-fname = "CoinMarketData.txt"
-f = open(fname,"w")
-f.write("\t")
-f.close()
 t = int(time.time())
 rt = t
-response = requests.get(url)
-page_soup = soup(response.content, "html.parser")
-rows = page_soup.find_all("tr")
-for row in rows:
-    data = row.find_all("td")
-    list_cell = []
-    for cell in data:
-        list_cell.append(cell.text)
-    if len(list_cell) > 0:
-        f = open(fname,"a")
-        f.write("\t"+list_cell[1]+" ("+list_cell[2]+")")
-        f.close()
-i = 0
-while rt - t < 3600:
+while rt - t < 0.0001:
     response = requests.get(url)
     page_soup = soup(response.content, "html.parser")
     rows = page_soup.find_all("tr")
-    i += 1
-    f = open(fname,"a")
-    f.write("\nprice"+str(i))
-    f.close()
     for row in rows:
         data = row.find_all("td")
         list_cell = []
         for cell in data:
             list_cell.append(cell.text)
-        if len(list_cell) > 0:
-            while len(list_cell[4]) < len(list_cell[1]) + len(list_cell[2]) + 3:
-                list_cell[4] += " "
-            f = open(fname,"a")
-            f.write("\t"+list_cell[4])
-            f.close()
+        if list_cell != []:
+            if coin_price.find_one({"Name": list_cell[1]}) == None:
+                coin = {
+                    "Name": list_cell[1],
+                    "Symbol": list_cell[2],
+                    "Price": [list_cell[4]]
+                }
+                coin_price.insert_one(coin)
+            else:
+                unit_update = coin_price.find_one({"Name": list_cell[1]})
+                unit_update["Price"].append(list_cell[4])
+                coin_price.update_one({"Name": list_cell[1]},{"$set":{"Price": unit_update["Price"]}})
+    all_coin = coin_price.find()
+    for item in all_coin:
+        fig,ax = plt.subplots()
+        print(ax.plot(range(len(item["Price"])),item["Price"]))
+        plt.show()
     rt = int(time.time())
-    time.sleep(300)
+    time.sleep(3)
 
 
